@@ -44,6 +44,14 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     body: body ? JSON.stringify(body) : undefined
   });
 
+  if (auth && response.status === 401) {
+    setStoredToken(null);
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+    throw new Error('Your session expired. Please sign in again.');
+  }
+
   const envelope = await response.json().catch(() => null);
 
   if (!response.ok || !envelope?.success) {
@@ -84,11 +92,11 @@ export async function getCustomers() {
   return request('/customers', { auth: true });
 }
 
-export async function createCustomer({ fullName, phone = '', email = '' }) {
+export async function createCustomer({ fullName, phone = '', email = '', facebookId = null, instagramId = null, whatsAppNumber = null }) {
   return request('/customers', {
     method: 'POST',
     auth: true,
-    body: { fullName, phone, email }
+    body: { fullName, phone, email, facebookId, instagramId, whatsAppNumber }
   });
 }
 
@@ -204,11 +212,14 @@ export async function getChannelAccounts() {
   return request('/channelaccounts', { auth: true });
 }
 
-export async function createChannelAccount({ channelType, displayName, externalAccountId = null, accessToken = null, refreshToken = null, webhookSecret = null, status = 'Active' }) {
+export async function createChannelAccount({
+  channelType, displayName, externalAccountId = null, accessToken = null, refreshToken = null, webhookSecret = null,
+  smtpHost = null, smtpPort = null, imapHost = null, imapPort = null, status = 'Active'
+}) {
   return request('/channelaccounts', {
     method: 'POST',
     auth: true,
-    body: { channelType, displayName, externalAccountId, accessToken, refreshToken, webhookSecret, status }
+    body: { channelType, displayName, externalAccountId, accessToken, refreshToken, webhookSecret, smtpHost, smtpPort, imapHost, imapPort, status }
   });
 }
 
