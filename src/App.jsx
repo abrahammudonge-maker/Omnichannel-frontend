@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { App as AntApp } from 'antd';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ConversationsPage } from './pages/ConversationsPage';
 import { ConversationDetailPage } from './pages/ConversationDetailPage';
@@ -15,24 +17,43 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { getCurrentUser, getNotifications, getStoredToken, setStoredToken } from './api';
 
+const NOTIFICATION_POLL_INTERVAL_MS = 30000;
+
 function RequireAuth({ isAuthenticated, children }) {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 function App() {
+  const { notification } = AntApp.useApp();
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getStoredToken()));
   const [unreadCount, setUnreadCount] = useState(0);
+  const seenNotificationIds = useRef(new Set());
+  const isFirstLoad = useRef(true);
 
   const refreshUnreadCount = useCallback(() => {
     const currentUser = getCurrentUser();
     if (!currentUser?.userId) return;
     getNotifications(currentUser.userId)
-      .then((data) => setUnreadCount(data.filter((n) => !n.isRead).length))
+      .then((data) => {
+        setUnreadCount(data.filter((n) => !n.isRead).length);
+
+        if (!isFirstLoad.current) {
+          const newOnes = data.filter((n) => !seenNotificationIds.current.has(n.id));
+          newOnes.forEach((n) => {
+            notification.info({ message: n.title, description: n.message, placement: 'topRight' });
+          });
+        }
+        isFirstLoad.current = false;
+        data.forEach((n) => seenNotificationIds.current.add(n.id));
+      })
       .catch(() => {});
-  }, []);
+  }, [notification]);
 
   useEffect(() => {
-    if (isAuthenticated) refreshUnreadCount();
+    if (!isAuthenticated) return;
+    refreshUnreadCount();
+    const interval = setInterval(refreshUnreadCount, NOTIFICATION_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [isAuthenticated, refreshUnreadCount]);
 
   const handleSignOut = () => {
@@ -52,6 +73,12 @@ function App() {
           element={isAuthenticated
             ? <Navigate to="/dashboard" replace />
             : <LoginPage onSignedIn={() => setIsAuthenticated(true)} />}
+        />
+        <Route
+          path="/register"
+          element={isAuthenticated
+            ? <Navigate to="/dashboard" replace />
+            : <RegisterPage onSignedIn={() => setIsAuthenticated(true)} />}
         />
         <Route path="/dashboard" element={<RequireAuth isAuthenticated={isAuthenticated}><DashboardPage /></RequireAuth>} />
         <Route path="/conversations" element={<RequireAuth isAuthenticated={isAuthenticated}><ConversationsPage /></RequireAuth>} />

@@ -18,6 +18,7 @@ import {
 const { Title, Paragraph, Text } = Typography;
 const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS' };
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed'];
+const REFRESH_INTERVAL_MS = 15000;
 
 export function ConversationDetailPage() {
   const { id } = useParams();
@@ -48,8 +49,23 @@ export function ConversationDetailPage() {
     setNotes(noteData);
   };
 
+  const refreshThread = async () => {
+    const [conversationData, messageData, noteData] = await Promise.all([
+      getConversationById(id),
+      getMessages(id),
+      getInternalNotes(id)
+    ]);
+    setConversation(conversationData);
+    setMessages(messageData);
+    setNotes(noteData);
+  };
+
   useEffect(() => {
     loadAll().catch((err) => toast.error(err.message));
+    const interval = setInterval(() => {
+      refreshThread().catch(() => {});
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 

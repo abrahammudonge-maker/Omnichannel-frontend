@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Col, Form, Input, Radio, Row, Select, Statistic, Table, Tag, Typography, App as AntApp } from 'antd';
-import { addInternalNote, createConversation, createCustomer, getConversations, getCustomers } from '../api';
+import { addInternalNote, createConversation, createCustomer, getAllMessages, getConversations, getCustomers } from '../api';
 
 const { Title, Paragraph, Text } = Typography;
 const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS' };
@@ -13,6 +13,7 @@ const CHANNEL_FIELD = {
   FacebookMessenger: { key: 'facebookId', label: 'Facebook ID', placeholder: 'Facebook Messenger PSID' },
   Instagram: { key: 'instagramId', label: 'Instagram ID', placeholder: 'Instagram-scoped ID' }
 };
+const REFRESH_INTERVAL_MS = 20000;
 
 export function ConversationsPage() {
   const [form] = Form.useForm();
@@ -20,6 +21,7 @@ export function ConversationsPage() {
   const { message } = AntApp.useApp();
   const [conversations, setConversations] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [lastActivityById, setLastActivityById] = useState(new Map());
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -27,13 +29,32 @@ export function ConversationsPage() {
   const customerMode = Form.useWatch('customerMode', form) ?? 'existing';
   const fieldConfig = CHANNEL_FIELD[channel];
 
-  const loadData = () => Promise.all([getConversations(), getCustomers()]).then(([conversationData, customerData]) => {
-    setConversations(conversationData);
+  const loadData = () => Promise.all([getConversations(), getCustomers(), getAllMessages()]).then(([conversationData, customerData, messageData]) => {
+    const activityMap = new Map();
+    messageData.forEach((m) => {
+      const existing = activityMap.get(m.conversationId);
+      if (!existing || new Date(m.sentAt) > new Date(existing)) {
+        activityMap.set(m.conversationId, m.sentAt);
+      }
+    });
+
+    const sorted = [...conversationData].sort((a, b) => {
+      const aTime = new Date(activityMap.get(a.id) ?? a.createdAt);
+      const bTime = new Date(activityMap.get(b.id) ?? b.createdAt);
+      return bTime - aTime;
+    });
+
+    setConversations(sorted);
     setCustomers(customerData);
+    setLastActivityById(activityMap);
   });
 
   useEffect(() => {
     loadData().catch((err) => message.error(err.message)).finally(() => setLoading(false));
+    const interval = setInterval(() => {
+      loadData().catch(() => {});
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -102,7 +123,11 @@ export function ConversationsPage() {
     { title: 'Customer', dataIndex: 'customerId', render: (id) => customerNameById.get(id) ?? id },
     { title: 'Channel', dataIndex: 'channel', render: (c) => <Tag>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag> },
     { title: 'Status', dataIndex: 'status', render: (s) => <Tag color={s === 'Open' ? 'blue' : 'default'}>{s}</Tag> },
-    { title: 'Created', dataIndex: 'createdAt', render: (d) => new Date(d).toLocaleString() }
+    {
+      title: 'Last activity',
+      key: 'lastActivity',
+      render: (_, c) => new Date(lastActivityById.get(c.id) ?? c.createdAt).toLocaleString()
+    }
   ];
 
   return (

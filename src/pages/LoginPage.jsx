@@ -1,6 +1,6 @@
 import { Button, Card, Form, Input, Typography, App as AntApp } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { loginUser } from '../api';
 
 const { Title, Paragraph } = Typography;
@@ -43,6 +43,9 @@ export function LoginPage({ onSignedIn }) {
             <Button type="primary" htmlType="submit" size="large" block>Sign in</Button>
           </Form.Item>
         </Form>
+        <Paragraph type="secondary" style={{ textAlign: 'center', marginBottom: 0 }}>
+          New organization? <Link to="/register">Create one</Link>
+        </Paragraph>
       </Card>
     </div>
   );

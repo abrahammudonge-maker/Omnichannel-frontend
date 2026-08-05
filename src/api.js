@@ -68,6 +68,15 @@ export async function loginUser(email, password) {
   return data;
 }
 
+export async function registerOrganization({ organizationName, adminFirstName, adminLastName, email, password, phone, country }) {
+  const data = await request('/auth/register', {
+    method: 'POST',
+    body: { organizationName, adminFirstName, adminLastName, email, password, phone, country }
+  });
+  setStoredToken(data.accessToken);
+  return data;
+}
+
 export async function getOrganizations() {
   return request('/organizations', { auth: true });
 }
@@ -102,6 +111,10 @@ export async function createCustomer({ fullName, phone = '', email = '', faceboo
 
 export async function getMessages(conversationId) {
   return request(`/messages/conversation/${conversationId}`, { auth: true });
+}
+
+export async function getAllMessages() {
+  return request('/messages', { auth: true });
 }
 
 export async function sendMessage({ conversationId, body, direction = 'Outbound', messageType = 'Text' }) {
