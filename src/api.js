@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5068/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5068/api';
 const TOKEN_STORAGE_KEY = 'omnichannel_token';
 
 export function getStoredToken() {
@@ -238,6 +238,14 @@ export async function createChannelAccount({
 
 export async function deleteChannelAccount(id) {
   return request(`/channelaccounts/${id}`, { method: 'DELETE', auth: true });
+}
+
+export async function connectMetaChannel({ channelType, code }) {
+  return request('/channelaccounts/connect-meta', {
+    method: 'POST',
+    auth: true,
+    body: { channelType, code }
+  });
 }
 
 export async function getAuditLogs() {

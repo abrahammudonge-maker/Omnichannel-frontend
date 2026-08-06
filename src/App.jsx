@@ -15,6 +15,8 @@ import { TagsPage } from './pages/TagsPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { getCurrentUser, getNotifications, getStoredToken, setStoredToken } from './api';
 
 const NOTIFICATION_POLL_INTERVAL_MS = 30000;
@@ -94,6 +96,8 @@ function App() {
         />
         <Route path="/settings" element={<RequireAuth isAuthenticated={isAuthenticated}><SettingsPage /></RequireAuth>} />
         <Route path="/audit-log" element={<RequireAuth isAuthenticated={isAuthenticated}><AuditLogPage /></RequireAuth>} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms-of-service" element={<TermsOfServicePage />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} />
       </Routes>
     </Layout>

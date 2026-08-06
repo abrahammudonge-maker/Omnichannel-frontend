@@ -46,6 +46,9 @@ export function LoginPage({ onSignedIn }) {
         <Paragraph type="secondary" style={{ textAlign: 'center', marginBottom: 0 }}>
           New organization? <Link to="/register">Create one</Link>
         </Paragraph>
+        <Paragraph type="secondary" style={{ textAlign: 'center', marginBottom: 0, fontSize: 12 }}>
+          <Link to="/privacy-policy">Privacy Policy</Link> · <Link to="/terms-of-service">Terms of Service</Link>
+        </Paragraph>
       </Card>
     </div>
   );

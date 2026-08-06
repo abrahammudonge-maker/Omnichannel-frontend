@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Descriptions, Form, Input, InputNumber, Popconfirm, Row, Select, Table, Tabs, Tag, Typography, App as AntApp } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Col, Descriptions, Form, Input, InputNumber, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Typography, App as AntApp } from 'antd';
+import { CopyOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
+  connectMetaChannel,
   createChannelAccount,
   createOrganizationSetting,
   deleteChannelAccount,
@@ -11,6 +12,7 @@ import {
   getOrganizationById,
   getOrganizationSettings
 } from '../api';
+import { launchMetaSignup } from '../facebookSdk';
 
 const CHANNEL_TYPES = ['WhatsApp', 'FacebookMessenger', 'Instagram', 'Email', 'Sms'];
 
@@ -29,6 +31,23 @@ const EMAIL_PROVIDER_PRESETS = {
 function resolveEmailProvider(address) {
   const domain = address?.split('@')[1]?.toLowerCase();
   return domain ? EMAIL_PROVIDER_PRESETS[domain] : undefined;
+}
+
+const META_CHANNELS = ['WhatsApp', 'FacebookMessenger', 'Instagram'];
+const META_PLATFORM_ID_FIELD = {
+  WhatsApp: { label: 'Phone Number ID', placeholder: 'From WhatsApp > API Setup in Meta App Dashboard' },
+  FacebookMessenger: { label: 'Facebook Page ID', placeholder: 'From your Page\'s About section' },
+  Instagram: { label: 'Instagram Business Account ID', placeholder: 'From Instagram > API Setup in Meta App Dashboard' }
+};
+const WEBHOOK_PATH = '/api/webhooks/meta';
+const META_CONFIG_ID = {
+  WhatsApp: import.meta.env.VITE_META_WHATSAPP_CONFIG_ID,
+  FacebookMessenger: import.meta.env.VITE_META_FACEBOOK_CONFIG_ID,
+  Instagram: import.meta.env.VITE_META_FACEBOOK_CONFIG_ID
+};
+
+function randomToken() {
+  return Array.from({ length: 24 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
 }
 
 function ProfileTab() {
@@ -131,6 +150,7 @@ function ChannelsTab() {
   const [accounts, setAccounts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
 
   const load = () => getChannelAccounts().then(setAccounts);
 
@@ -149,6 +169,20 @@ function ChannelsTab() {
     }
   };
 
+  const handleConnectMeta = async (channelType) => {
+    setConnecting(true);
+    try {
+      const code = await launchMetaSignup(META_CONFIG_ID[channelType]);
+      await connectMetaChannel({ channelType, code });
+      await load();
+      message.success(`${channelType} connected.`);
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     try {
       await deleteChannelAccount(id);
@@ -161,6 +195,7 @@ function ChannelsTab() {
   const channelType = Form.useWatch('channelType', form);
   const mailboxAddress = Form.useWatch('externalAccountId', form);
   const isEmail = channelType === 'Email';
+  const isMeta = META_CHANNELS.includes(channelType);
   const detectedProvider = isEmail ? resolveEmailProvider(mailboxAddress) : undefined;
 
   const handleMailboxChange = (event) => {
@@ -178,7 +213,7 @@ function ChannelsTab() {
   const columns = [
     { title: 'Display name', dataIndex: 'displayName' },
     { title: 'Type', dataIndex: 'channelType', render: (t) => <Tag>{t}</Tag> },
-    { title: 'Mailbox', dataIndex: 'externalAccountId', render: (v) => v || '—' },
+    { title: 'Account ID', dataIndex: 'externalAccountId', render: (v) => v || '—' },
     { title: 'SMTP', dataIndex: 'smtpHost', render: (v, a) => (v ? `${v}:${a.smtpPort}` : '—') },
     { title: 'Status', dataIndex: 'status', render: (s) => <Tag color="green">{s}</Tag> },
     {
@@ -201,7 +236,9 @@ function ChannelsTab() {
             style={{ marginBottom: 16 }}
             title={isEmail
               ? "Live: connects a real mailbox via SMTP/IMAP. Sending happens immediately when an agent replies; incoming email is polled every 30 seconds and turned into new conversations. Gmail, Outlook/Hotmail, Yahoo, Zoho, and iCloud are auto-detected — any other domain, enter the SMTP/IMAP server yourself."
-              : "This channel type is a placeholder for now — only Email sends and receives for real. WhatsApp/Messenger/Instagram/SMS are the next phase of work."}
+              : isMeta
+                ? "Live, but requires a Meta Developer App with this product added, and a public HTTPS URL (e.g. via ngrok) for the webhook below — Meta cannot reach localhost directly. Sending works as soon as the access token is valid; receiving requires the webhook to be registered in the Meta App Dashboard."
+                : "SMS is the next phase of work — this channel type is a placeholder for now."}
           />
           <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ channelType: 'Email' }}>
             <Form.Item name="channelType" label="Channel type" rules={[{ required: true }]}>
@@ -252,6 +289,76 @@ function ChannelsTab() {
                 <Form.Item name="imapPort" label="IMAP port" rules={[{ required: true }]} initialValue={993}>
                   <InputNumber style={{ width: '100%' }} placeholder="993" />
                 </Form.Item>
+              </>
+            )}
+            {isMeta && (
+              <>
+                <Button
+                  block
+                  loading={connecting}
+                  disabled={!META_CONFIG_ID[channelType]}
+                  onClick={() => handleConnectMeta(channelType)}
+                  style={{ marginBottom: 16 }}
+                >
+                  Connect via Meta
+                </Button>
+                {!META_CONFIG_ID[channelType] && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    title="Not configured yet"
+                    description="This channel's Meta configuration ID isn't set (VITE_META_WHATSAPP_CONFIG_ID / VITE_META_FACEBOOK_CONFIG_ID). Enter details manually below in the meantime, or add the config ID once it exists in the Meta App Dashboard."
+                  />
+                )}
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                  Or enter details manually:
+                </Typography.Text>
+                <Form.Item
+                  name="externalAccountId"
+                  label={META_PLATFORM_ID_FIELD[channelType].label}
+                  rules={[{ required: true }]}
+                >
+                  <Input placeholder={META_PLATFORM_ID_FIELD[channelType].placeholder} />
+                </Form.Item>
+                <Form.Item
+                  name="accessToken"
+                  label="Access token"
+                  rules={[{ required: true }]}
+                  tooltip="A long-lived Page/System User access token from the Meta App Dashboard, scoped with messaging permissions for this product."
+                >
+                  <Input.Password placeholder="EAAG..." />
+                </Form.Item>
+                <Form.Item
+                  label="Webhook verify token"
+                  required
+                  tooltip="A secret you choose. Enter this exact value as the Verify Token when configuring the webhook in the Meta App Dashboard."
+                >
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Form.Item name="webhookSecret" noStyle rules={[{ required: true }]}>
+                      <Input placeholder="Any random string you choose" />
+                    </Form.Item>
+                    <Button icon={<ReloadOutlined />} onClick={() => form.setFieldValue('webhookSecret', randomToken())} />
+                  </Space.Compact>
+                </Form.Item>
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  title="Webhook callback URL"
+                  description={
+                    <>
+                      <div>Register this path in Meta App Dashboard → Webhooks, behind your public tunnel host:</div>
+                      <code style={{ display: 'block', marginTop: 6, wordBreak: 'break-all' }}>
+                        https://&lt;your-ngrok-host&gt;{WEBHOOK_PATH}
+                        <CopyOutlined
+                          style={{ marginLeft: 8, cursor: 'pointer' }}
+                          onClick={() => navigator.clipboard.writeText(WEBHOOK_PATH)}
+                        />
+                      </code>
+                    </>
+                  }
+                />
               </>
             )}
             <Form.Item>
