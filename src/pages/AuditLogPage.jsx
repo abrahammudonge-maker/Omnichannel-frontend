@@ -27,12 +27,39 @@ export function AuditLogPage() {
     return map;
   }, [users]);
 
+  const actionFilters = useMemo(
+    () => [...new Set(logs.map((l) => l.action))].sort().map((a) => ({ text: a, value: a })),
+    [logs]
+  );
+  const entityFilters = useMemo(
+    () => [...new Set(logs.map((l) => l.entity))].sort().map((e) => ({ text: e, value: e })),
+    [logs]
+  );
+
   const columns = [
-    { title: 'Action', dataIndex: 'action', render: (a) => <Tag color="blue">{a}</Tag> },
-    { title: 'Entity', dataIndex: 'entity' },
+    {
+      title: 'Action',
+      dataIndex: 'action',
+      render: (a) => <Tag color={a?.startsWith('Admin') ? 'gold' : 'blue'}>{a}</Tag>,
+      filters: actionFilters,
+      onFilter: (value, record) => record.action === value
+    },
+    {
+      title: 'Entity',
+      dataIndex: 'entity',
+      filters: entityFilters,
+      onFilter: (value, record) => record.entity === value
+    },
+    { title: 'Details', dataIndex: 'metadata', render: (v) => v || '—' },
     { title: 'By', dataIndex: 'userId', render: (id) => id ? userNameById.get(id) ?? 'Unknown' : 'System' },
     { title: 'IP', dataIndex: 'ipAddress', render: (v) => v || '—' },
-    { title: 'When', dataIndex: 'timestamp', render: (d) => new Date(d).toLocaleString() }
+    {
+      title: 'When',
+      dataIndex: 'timestamp',
+      render: (d) => new Date(d).toLocaleString(),
+      sorter: (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+      defaultSortOrder: 'descend'
+    }
   ];
 
   return (

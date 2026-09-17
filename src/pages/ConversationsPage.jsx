@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Col, Form, Input, Radio, Row, Select, Statistic, Table, Tag, Typography, App as AntApp } from 'antd';
-import { addInternalNote, createConversation, createCustomer, getAllMessages, getConversations, getCustomers } from '../api';
+import { addInternalNote, createConversation, createCustomer, getAllMessages, getChannelAccounts, getConversations, getCustomers } from '../api';
 
 const { Title, Paragraph, Text } = Typography;
 const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS' };
@@ -13,6 +13,7 @@ const CHANNEL_FIELD = {
   FacebookMessenger: { key: 'facebookId', label: 'Facebook ID', placeholder: 'Facebook Messenger PSID' },
   Instagram: { key: 'instagramId', label: 'Instagram ID', placeholder: 'Instagram-scoped ID' }
 };
+const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed'];
 const REFRESH_INTERVAL_MS = 20000;
 
 export function ConversationsPage() {
@@ -21,6 +22,7 @@ export function ConversationsPage() {
   const { message } = AntApp.useApp();
   const [conversations, setConversations] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [channelAccounts, setChannelAccounts] = useState([]);
   const [lastActivityById, setLastActivityById] = useState(new Map());
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,13 @@ export function ConversationsPage() {
   const customerMode = Form.useWatch('customerMode', form) ?? 'existing';
   const fieldConfig = CHANNEL_FIELD[channel];
 
-  const loadData = () => Promise.all([getConversations(), getCustomers(), getAllMessages()]).then(([conversationData, customerData, messageData]) => {
+  const accountsForChannel = useMemo(
+    () => channelAccounts.filter((a) => a.channelType === channel && a.status === 'Active'),
+    [channelAccounts, channel]
+  );
+
+  const loadData = () => Promise.all([getConversations(), getCustomers(), getAllMessages(), getChannelAccounts()]).then(([conversationData, customerData, messageData, channelAccountData]) => {
+    setChannelAccounts(channelAccountData);
     const activityMap = new Map();
     messageData.forEach((m) => {
       const existing = activityMap.get(m.conversationId);
@@ -105,7 +113,7 @@ export function ConversationsPage() {
         customerLabel = existing.fullName;
       }
 
-      const conversationId = await createConversation({ customerId, channel: values.channel });
+      const conversationId = await createConversation({ customerId, channel: values.channel, channelAccountId: values.channelAccountId ?? null });
       if (values.note?.trim()) {
         await addInternalNote({ conversationId, body: values.note.trim() });
       }
@@ -119,10 +127,30 @@ export function ConversationsPage() {
     }
   };
 
+  const [searchText, setSearchText] = useState('');
+
+  const filteredConversations = useMemo(() => {
+    if (!searchText.trim()) return conversations;
+    const needle = searchText.trim().toLowerCase();
+    return conversations.filter((c) => (customerNameById.get(c.customerId) ?? '').toLowerCase().includes(needle));
+  }, [conversations, customerNameById, searchText]);
+
   const columns = [
     { title: 'Customer', dataIndex: 'customerId', render: (id) => customerNameById.get(id) ?? id },
-    { title: 'Channel', dataIndex: 'channel', render: (c) => <Tag>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag> },
-    { title: 'Status', dataIndex: 'status', render: (s) => <Tag color={s === 'Open' ? 'blue' : 'default'}>{s}</Tag> },
+    {
+      title: 'Channel',
+      dataIndex: 'channel',
+      render: (c) => <Tag>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag>,
+      filters: Object.entries(CHANNEL_LABELS).map(([value, text]) => ({ text, value: Number(value) })),
+      onFilter: (value, record) => record.channel === value
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      render: (s) => <Tag color={s === 'Open' ? 'blue' : 'default'}>{s}</Tag>,
+      filters: STATUS_OPTIONS.map((s) => ({ text: s, value: s })),
+      onFilter: (value, record) => record.status === value
+    },
     {
       title: 'Last activity',
       key: 'lastActivity',
@@ -148,9 +176,23 @@ export function ConversationsPage() {
               <Form.Item name="channel" label="Channel" rules={[{ required: true }]}>
                 <Select
                   options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: c }))}
-                  onChange={() => form.setFieldValue('contactValue', undefined)}
+                  onChange={() => form.setFieldsValue({ contactValue: undefined, channelAccountId: undefined })}
                 />
               </Form.Item>
+
+              {accountsForChannel.length > 1 && (
+                <Form.Item
+                  name="channelAccountId"
+                  label="Send from"
+                  rules={[{ required: true, message: `Select which connected ${channel} account to use.` }]}
+                  tooltip="Your organization has more than one connected account for this channel — pick which one this conversation should use."
+                >
+                  <Select
+                    placeholder="Select an account"
+                    options={accountsForChannel.map((a) => ({ value: a.id, label: `${a.displayName} (${a.externalAccountId})` }))}
+                  />
+                </Form.Item>
+              )}
 
               <Form.Item name="customerMode">
                 <Radio.Group optionType="button" block>
@@ -200,10 +242,17 @@ export function ConversationsPage() {
         </Col>
         <Col xs={24} md={15}>
           <Card title="Conversations">
+            <Input.Search
+              placeholder="Search by customer name"
+              allowClear
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ marginBottom: 16, maxWidth: 320 }}
+            />
             <Table
               rowKey="id"
               loading={loading}
-              dataSource={conversations}
+              dataSource={filteredConversations}
               columns={columns}
               pagination={{ pageSize: 8 }}
               onRow={(record) => ({ onClick: () => navigate(`/conversations/${record.id}`), style: { cursor: 'pointer' } })}
