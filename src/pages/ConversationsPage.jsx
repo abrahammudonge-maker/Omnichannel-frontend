@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, Col, Form, Input, Radio, Row, Select, Statistic, Table, Tabs, Tag, Typography, App as AntApp } from 'antd';
+import { Button, Card, Col, Form, Input, Modal, Radio, Row, Select, Space, Statistic, Table, Tag, App as AntApp } from 'antd';
 import { addInternalNote, createConversation, createCustomer, getAllMessages, getChannelAccounts, getConversations, getCustomers } from '../api';
+import { ChannelBadge, PageHeader, PersonAvatar } from '../components/ui';
 
 const { Title, Paragraph, Text } = Typography;
 const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS', 6: 'Voice' };
@@ -129,6 +130,7 @@ export function ConversationsPage() {
       }
       await loadData();
       message.success(`Case created for ${customerLabel} on ${values.channel}.`);
+      setNewOpen(false);
       form.resetFields();
     } catch (err) {
       message.error(err.message);
@@ -138,6 +140,7 @@ export function ConversationsPage() {
   };
 
   const [searchText, setSearchText] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeInbox = INBOX_TABS.some((t) => t.key === searchParams.get('inbox')) ? searchParams.get('inbox') : 'all';
 
@@ -166,26 +169,26 @@ export function ConversationsPage() {
     return inboxFiltered.filter((c) => (customerNameById.get(c.customerId) ?? '').toLowerCase().includes(needle));
   }, [conversations, customerNameById, searchText, activeInbox]);
 
-  const inboxItems = INBOX_TABS.map((t) => ({
-    key: t.key,
-    label: (
-      <span>
-        {t.label} <Tag style={{ marginInlineStart: 4 }} color={CHANNEL_COLORS[t.key] ?? 'default'}>{inboxCounts[t.key].total}</Tag>
-        {inboxCounts[t.key].open > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{inboxCounts[t.key].open} open</Text>}
-      </span>
-    )
-  }));
 
   const selectInbox = (key) => {
     setSearchParams(key === 'all' ? {} : { inbox: key });
   };
 
   const columns = [
-    { title: 'Customer', dataIndex: 'customerId', render: (id) => customerNameById.get(id) ?? id },
+    {
+      title: 'Customer',
+      dataIndex: 'customerId',
+      render: (id) => (
+        <Space>
+          <PersonAvatar name={customerNameById.get(id) ?? '?'} size={28} />
+          {customerNameById.get(id) ?? id}
+        </Space>
+      )
+    },
     {
       title: 'Channel',
       dataIndex: 'channel',
-      render: (c) => <Tag color={CHANNEL_COLORS[c]}>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag>,
+      render: (c) => <ChannelBadge channel={c} />,
       filters: Object.entries(CHANNEL_LABELS).map(([value, text]) => ({ text, value: Number(value) })),
       onFilter: (value, record) => record.channel === value
     },
@@ -205,8 +208,11 @@ export function ConversationsPage() {
 
   return (
     <>
-      <Title level={2}>Conversations</Title>
-      <Paragraph type="secondary">Live view of every conversation in your organization.</Paragraph>
+      <PageHeader
+        title="Conversations"
+        subtitle="Every customer conversation, newest activity first."
+        actions={<Button type="primary" onClick={() => setNewOpen(true)}>New conversation</Button>}
+      />
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}><Card><Statistic title="Open tickets" value={conversations.filter((c) => c.status === 'Open').length} /></Card></Col>
@@ -214,9 +220,9 @@ export function ConversationsPage() {
         <Col xs={24} md={8}><Card><Statistic title="Customers" value={customers.length} /></Card></Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} md={9}>
-          <Card title="Launch a new conversation">
+      <Modal title="Start a conversation" open={newOpen} onCancel={() => setNewOpen(false)} footer={null} destroyOnHidden>
+        <div>
+          <div>
             <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={{ channel: 'Email', customerMode: 'existing' }}>
               <Form.Item name="channel" label="Channel" rules={[{ required: true }]}>
                 <Select
@@ -283,11 +289,26 @@ export function ConversationsPage() {
                 <Button type="primary" htmlType="submit" loading={submitting} block>Create case</Button>
               </Form.Item>
             </Form>
-          </Card>
-        </Col>
-        <Col xs={24} md={15}>
-          <Card title="Inboxes">
-            <Tabs activeKey={activeInbox} onChange={selectInbox} items={inboxItems} />
+          </div>
+        </div>
+      </Modal>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <Card>
+            <Space wrap style={{ marginBottom: 16 }}>
+              {INBOX_TABS.map((t) => (
+                <Button
+                  key={t.key}
+                  shape="round"
+                  type={activeInbox === t.key ? 'primary' : 'default'}
+                  onClick={() => selectInbox(t.key)}
+                >
+                  {t.label} · {inboxCounts[t.key].total}
+                  {inboxCounts[t.key].open > 0 ? ` · ${inboxCounts[t.key].open} open` : ''}
+                </Button>
+              ))}
+            </Space>
             <Input.Search
               placeholder="Search by customer name"
               allowClear

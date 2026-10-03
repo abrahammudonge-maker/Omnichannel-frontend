@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Input, Modal, Select, Space, Table, Tag, Typography, App as AntApp } from 'antd';
+import { Alert, Button, Card, Col, Input, Row, Select, Space, Statistic, Table, Tag, Typography, App as AntApp } from 'antd';
+import { CheckCircleFilled, CloseCircleFilled, SendOutlined } from '@ant-design/icons';
 import { getMessageTemplates, sendBulkTemplate } from '../api';
+import { EmptyState, PageHeader } from '../components/ui';
 
-const { Title, Paragraph, Text } = Typography;
+const { Text, Paragraph } = Typography;
 const MAX_RECIPIENTS = 500;
 const PLACEHOLDER = '254712345678, Jane Wanjiru, 1234\n254722000111, , 5678';
 
@@ -19,10 +21,21 @@ function parseRecipients(text, parameterCount) {
     const customerName = cells[1] || null;
     const bodyParameters = cells.slice(2);
     const problems = [];
-    if (!/^\+?\d{7,15}$/.test(phoneNumber.replace(/\s/g, ''))) problems.push('phone number looks invalid');
-    if (bodyParameters.length !== parameterCount) problems.push(`expected ${parameterCount} parameter(s), got ${bodyParameters.length}`);
+    if (!/^\+?\d{7,15}$/.test(phoneNumber.replace(/\s/g, ''))) problems.push('the phone number looks wrong');
+    if (bodyParameters.length !== parameterCount) {
+      problems.push(`this template needs ${parameterCount} value${parameterCount === 1 ? '' : 's'} after the name, but this line has ${bodyParameters.length}`);
+    }
     return { line: index + 1, phoneNumber, customerName, bodyParameters, problems };
   });
+}
+
+function StepTitle({ number, title, done }) {
+  return (
+    <Space>
+      {done ? <CheckCircleFilled style={{ color: '#25D366' }} /> : <Tag color="blue" style={{ borderRadius: 999, margin: 0 }}>{number}</Tag>}
+      <Text strong>{title}</Text>
+    </Space>
+  );
 }
 
 export function BulkSendPage() {
@@ -44,13 +57,17 @@ export function BulkSendPage() {
   const parsed = useMemo(() => (template ? parseRecipients(recipientText, parameterCount) : []), [template, recipientText, parameterCount]);
   const invalid = parsed.filter((r) => r.problems.length > 0);
   const tooMany = parsed.length > MAX_RECIPIENTS;
-  const canSend = template && parsed.length > 0 && invalid.length === 0 && !tooMany && !sending;
+  const stepOneDone = Boolean(template);
+  const stepTwoDone = parsed.length > 0 && invalid.length === 0 && !tooMany;
+  const canSend = stepOneDone && stepTwoDone && !sending;
+  const recipientCount = parsed.length;
+  const sendLabel = `Send to ${recipientCount} ${recipientCount === 1 ? 'person' : 'people'}`;
 
   const confirmAndSend = () => {
     modal.confirm({
-      title: `Send "${template.name}" to ${parsed.length} recipient${parsed.length === 1 ? '' : 's'}?`,
-      content: 'Only send to people who opted in to receive messages from you. Each message is charged by Meta.',
-      okText: 'Send',
+      title: `Send "${template.name}" to ${recipientCount} ${recipientCount === 1 ? 'person' : 'people'}?`,
+      content: 'Send only to people who asked to hear from you. Meta charges for each message that is sent.',
+      okText: 'Yes, send',
       onOk: async () => {
         setSending(true);
         try {
@@ -72,71 +89,129 @@ export function BulkSendPage() {
   const resultColumns = [
     { title: 'Phone', dataIndex: 'phoneNumber' },
     {
-      title: 'Status',
+      title: 'Result',
       dataIndex: 'success',
-      render: (ok) => (ok ? <Tag color="green">Sent</Tag> : <Tag color="red">Not sent</Tag>)
+      render: (ok) => (ok
+        ? <Tag icon={<CheckCircleFilled />} color="success">Sent</Tag>
+        : <Tag icon={<CloseCircleFilled />} color="error">Not sent</Tag>)
     },
-    { title: 'Details', dataIndex: 'errorMessage', render: (v, row) => (row.success ? row.externalMessageId : v) }
+    { title: 'Details', dataIndex: 'errorMessage', render: (v, row) => (row.success ? <Text type="secondary">Accepted by WhatsApp</Text> : v) }
   ];
 
   return (
     <>
-      <Title level={2}>Bulk send</Title>
-      <Paragraph type="secondary">Send one approved WhatsApp template to a list of numbers. Each recipient gets their own result.</Paragraph>
+      <PageHeader
+        title="Bulk send"
+        subtitle="Send one approved WhatsApp template to a list of people. Each person gets their own result."
+      />
 
-      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-        <Card title="1. Choose a template">
-          <Select
-            style={{ width: '100%' }}
-            placeholder={templates.length === 0 ? 'No approved templates yet' : 'Choose an approved template'}
-            value={templateId}
-            onChange={setTemplateId}
-            options={templates.map((t) => ({ value: t.id, label: `${t.name} (${t.language})` }))}
-          />
-          {template && (
-            <Paragraph style={{ marginTop: 12, marginBottom: 0 }} type="secondary">
-              {template.bodyText}
-              {parameterCount > 0 && <Text type="secondary"> — needs {parameterCount} parameter{parameterCount === 1 ? '' : 's'} per recipient</Text>}
-            </Paragraph>
-          )}
-        </Card>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={15}>
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <Card title={<StepTitle number={1} title="Choose a template" done={stepOneDone} />}>
+              {templates.length === 0 ? (
+                <EmptyState title="No approved templates yet" hint="Create and get a template approved by WhatsApp first." />
+              ) : (
+                <>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="Choose an approved template"
+                    value={templateId}
+                    onChange={setTemplateId}
+                    options={templates.map((t) => ({ value: t.id, label: `${t.name} (${t.language})` }))}
+                  />
+                  {template && (
+                    <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+                      "{template.bodyText}"
+                      {parameterCount > 0 && <> — each person needs {parameterCount} value{parameterCount === 1 ? '' : 's'}.</>}
+                    </Paragraph>
+                  )}
+                </>
+              )}
+            </Card>
 
-        <Card title="2. Recipients">
-          <Paragraph type="secondary">
-            One recipient per line: <Text code>phone, name, parameter1, parameter2…</Text>. Leave the name blank if you don't have one. Up to {MAX_RECIPIENTS} per send.
-          </Paragraph>
-          <Input.TextArea rows={8} value={recipientText} onChange={(e) => setRecipientText(e.target.value)} placeholder={PLACEHOLDER} />
-          <Space style={{ marginTop: 12 }} wrap>
-            <Text>{parsed.length} recipient{parsed.length === 1 ? '' : 's'}</Text>
-            {invalid.length > 0 && <Tag color="red">{invalid.length} line{invalid.length === 1 ? '' : 's'} need fixing</Tag>}
-            {tooMany && <Tag color="red">Over the {MAX_RECIPIENTS} limit</Tag>}
+            <Card title={<StepTitle number={2} title="Add your recipients" done={stepTwoDone} />}>
+              <Paragraph type="secondary">
+                One person per line, in this order: <Text code>phone, name, value1, value2…</Text>. Leave the name empty if you don't have it.
+              </Paragraph>
+              <Input.TextArea
+                rows={8}
+                value={recipientText}
+                onChange={(e) => setRecipientText(e.target.value)}
+                placeholder={PLACEHOLDER}
+                disabled={!template}
+              />
+              {!template && <Text type="secondary" style={{ fontSize: 12 }}>Choose a template first.</Text>}
+              {invalid.length > 0 && (
+                <Alert
+                  style={{ marginTop: 12 }}
+                  type="warning"
+                  showIcon
+                  title={`${invalid.length} line${invalid.length === 1 ? '' : 's'} need fixing before you can send`}
+                  description={
+                    <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+                      {invalid.slice(0, 5).map((r) => (
+                        <li key={r.line}>Line {r.line} ({r.phoneNumber || 'empty'}): {r.problems.join('; ')}</li>
+                      ))}
+                    </ul>
+                  }
+                />
+              )}
+              {tooMany && (
+                <Alert style={{ marginTop: 12 }} type="error" showIcon title={`The limit is ${MAX_RECIPIENTS} people per send. Split the list and send it in parts.`} />
+              )}
+            </Card>
+
+            <Card title={<StepTitle number={3} title="Review and send" done={false} />}>
+              <Button
+                type="primary"
+                size="large"
+                icon={<SendOutlined />}
+                disabled={!canSend}
+                loading={sending}
+                onClick={confirmAndSend}
+              >
+                {recipientCount > 0 ? sendLabel : 'Send'}
+              </Button>
+              {!canSend && (
+                <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+                  {!stepOneDone
+                    ? 'Choose a template to continue.'
+                    : recipientCount === 0
+                      ? 'Add at least one recipient to continue.'
+                      : invalid.length > 0
+                        ? 'Fix the highlighted lines to continue.'
+                        : 'Remove some recipients — the limit is 500 per send.'}
+                </Paragraph>
+              )}
+            </Card>
           </Space>
-          {invalid.length > 0 && (
-            <Alert
-              style={{ marginTop: 12 }}
-              type="warning"
-              showIcon
-              title="Fix these lines before sending"
-              description={invalid.slice(0, 5).map((r) => `Line ${r.line} (${r.phoneNumber || 'blank'}): ${r.problems.join('; ')}`).join(' · ')}
-            />
-          )}
-          <Button type="primary" style={{ marginTop: 16 }} disabled={!canSend} loading={sending} onClick={confirmAndSend}>
-            Send to {parsed.length} recipient{parsed.length === 1 ? '' : 's'}
-          </Button>
-        </Card>
+        </Col>
 
-        {result && (
-          <Card title={`Results — ${result.sent} sent, ${result.failed} not sent`}>
-            <Table
-              rowKey={(row) => `${row.phoneNumber}-${row.externalMessageId ?? row.errorMessage}`}
-              size="small"
-              columns={resultColumns}
-              dataSource={result.results}
-              pagination={{ pageSize: 10 }}
-            />
+        <Col xs={24} lg={9}>
+          <Card title="This send at a glance">
+            <Row gutter={[12, 12]}>
+              <Col span={12}><Statistic title="People" value={recipientCount} /></Col>
+              <Col span={12}><Statistic title="Problems" value={invalid.length} valueStyle={{ color: invalid.length ? '#faad14' : undefined }} /></Col>
+            </Row>
+            <Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0 }}>
+              Messages are paced automatically, so about 5 are sent each second per sending number. Large lists take a few minutes.
+            </Paragraph>
           </Card>
-        )}
-      </Space>
+
+          {result && (
+            <Card title={`Results: ${result.sent} sent, ${result.failed} not sent`} style={{ marginTop: 16 }}>
+              <Table
+                rowKey={(row) => `${row.phoneNumber}-${row.externalMessageId ?? row.errorMessage}`}
+                size="small"
+                columns={resultColumns}
+                dataSource={result.results}
+                pagination={{ pageSize: 8 }}
+              />
+            </Card>
+          )}
+        </Col>
+      </Row>
     </>
   );
 }
