@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button, Card, Col, Form, Input, Radio, Row, Select, Statistic, Table, Tag, Typography, App as AntApp } from 'antd';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Button, Card, Col, Form, Input, Radio, Row, Select, Statistic, Table, Tabs, Tag, Typography, App as AntApp } from 'antd';
 import { addInternalNote, createConversation, createCustomer, getAllMessages, getChannelAccounts, getConversations, getCustomers } from '../api';
 
 const { Title, Paragraph, Text } = Typography;
-const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS' };
+const CHANNEL_LABELS = { 1: 'WhatsApp', 2: 'Facebook Messenger', 3: 'Instagram', 4: 'Email', 5: 'SMS', 6: 'Voice' };
+const CHANNEL_COLORS = { 1: 'green', 2: 'blue', 3: 'magenta', 4: 'geekblue', 5: 'orange', 6: 'purple' };
+const INBOX_TABS = [
+  { key: 'all', label: 'All inboxes' },
+  { key: '1', label: 'WhatsApp' },
+  { key: '2', label: 'Messenger' },
+  { key: '3', label: 'Instagram' },
+  { key: '4', label: 'Email' },
+  { key: '5', label: 'SMS' },
+  { key: '6', label: 'Voice' }
+];
 const CHANNEL_OPTIONS = ['WhatsApp', 'FacebookMessenger', 'Instagram', 'Email', 'Sms'];
 const CHANNEL_FIELD = {
   Email: { key: 'email', label: 'Email address', placeholder: 'customer@example.com', type: 'email' },
@@ -128,19 +138,54 @@ export function ConversationsPage() {
   };
 
   const [searchText, setSearchText] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeInbox = INBOX_TABS.some((t) => t.key === searchParams.get('inbox')) ? searchParams.get('inbox') : 'all';
+
+  const inboxCounts = useMemo(() => {
+    const counts = {};
+    INBOX_TABS.forEach((t) => { counts[t.key] = { total: 0, open: 0 }; });
+    conversations.forEach((c) => {
+      const isOpen = c.status === 'Open';
+      counts.all.total += 1;
+      if (isOpen) counts.all.open += 1;
+      const key = String(c.channel);
+      if (counts[key]) {
+        counts[key].total += 1;
+        if (isOpen) counts[key].open += 1;
+      }
+    });
+    return counts;
+  }, [conversations]);
 
   const filteredConversations = useMemo(() => {
-    if (!searchText.trim()) return conversations;
+    const inboxFiltered = activeInbox === 'all'
+      ? conversations
+      : conversations.filter((c) => String(c.channel) === activeInbox);
+    if (!searchText.trim()) return inboxFiltered;
     const needle = searchText.trim().toLowerCase();
-    return conversations.filter((c) => (customerNameById.get(c.customerId) ?? '').toLowerCase().includes(needle));
-  }, [conversations, customerNameById, searchText]);
+    return inboxFiltered.filter((c) => (customerNameById.get(c.customerId) ?? '').toLowerCase().includes(needle));
+  }, [conversations, customerNameById, searchText, activeInbox]);
+
+  const inboxItems = INBOX_TABS.map((t) => ({
+    key: t.key,
+    label: (
+      <span>
+        {t.label} <Tag style={{ marginInlineStart: 4 }} color={CHANNEL_COLORS[t.key] ?? 'default'}>{inboxCounts[t.key].total}</Tag>
+        {inboxCounts[t.key].open > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{inboxCounts[t.key].open} open</Text>}
+      </span>
+    )
+  }));
+
+  const selectInbox = (key) => {
+    setSearchParams(key === 'all' ? {} : { inbox: key });
+  };
 
   const columns = [
     { title: 'Customer', dataIndex: 'customerId', render: (id) => customerNameById.get(id) ?? id },
     {
       title: 'Channel',
       dataIndex: 'channel',
-      render: (c) => <Tag>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag>,
+      render: (c) => <Tag color={CHANNEL_COLORS[c]}>{CHANNEL_LABELS[c] ?? 'Unknown'}</Tag>,
       filters: Object.entries(CHANNEL_LABELS).map(([value, text]) => ({ text, value: Number(value) })),
       onFilter: (value, record) => record.channel === value
     },
@@ -241,7 +286,8 @@ export function ConversationsPage() {
           </Card>
         </Col>
         <Col xs={24} md={15}>
-          <Card title="Conversations">
+          <Card title="Inboxes">
+            <Tabs activeKey={activeInbox} onChange={selectInbox} items={inboxItems} />
             <Input.Search
               placeholder="Search by customer name"
               allowClear

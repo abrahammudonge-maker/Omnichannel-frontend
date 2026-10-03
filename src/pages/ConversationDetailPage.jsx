@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Empty, Image, Input, List, Modal, Row, Select, Skeleton, Space, Tag, Tooltip, Typography, Upload, App as AntApp } from 'antd';
-import { ArrowLeftOutlined, FileOutlined, FileTextOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EnvironmentOutlined, FileOutlined, FileTextOutlined, PaperClipOutlined, SendOutlined } from '@ant-design/icons';
 import {
   addInternalNote,
   assignConversation,
@@ -17,6 +17,7 @@ import {
   getTags,
   getMessages,
   getUsers,
+  sendLocationMessage,
   sendMessage,
   sendTemplateMessage,
   replaceConversationTags,
@@ -122,6 +123,10 @@ export function ConversationDetailPage() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [templateValues, setTemplateValues] = useState([]);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [locationForm, setLocationForm] = useState({ latitude: '', longitude: '', name: '', address: '' });
+  const [sendingLocation, setSendingLocation] = useState(false);
+  const [locatingDevice, setLocatingDevice] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const threadRef = useRef(null);
 
@@ -236,6 +241,54 @@ export function ConversationDetailPage() {
       toast.error(err.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const useDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('This browser cannot read your location.');
+      return;
+    }
+    setLocatingDevice(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationForm((current) => ({
+          ...current,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6)
+        }));
+        setLocatingDevice(false);
+      },
+      (err) => {
+        toast.error(err.message);
+        setLocatingDevice(false);
+      }
+    );
+  };
+
+  const handleSendLocation = async () => {
+    const latitude = Number(locationForm.latitude);
+    const longitude = Number(locationForm.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      toast.error('Enter a valid latitude (-90 to 90) and longitude (-180 to 180).');
+      return;
+    }
+    setSendingLocation(true);
+    try {
+      await sendLocationMessage({
+        conversationId: id,
+        latitude,
+        longitude,
+        name: locationForm.name.trim() || null,
+        address: locationForm.address.trim() || null
+      });
+      setLocationModalOpen(false);
+      setLocationForm({ latitude: '', longitude: '', name: '', address: '' });
+      setMessages(await getMessages(id));
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSendingLocation(false);
     }
   };
 
@@ -364,6 +417,11 @@ export function ConversationDetailPage() {
                   </Button>
                 </Tooltip>
               )}
+              {isWhatsApp && (
+                <Button icon={<EnvironmentOutlined />} onClick={() => setLocationModalOpen(true)}>
+                  Share location
+                </Button>
+              )}
             </Space>
             {attachments.length > 0 && <List size="small" header="Conversation files" dataSource={attachments} renderItem={(attachment) => <List.Item actions={[<Button key="download" size="small" onClick={() => downloadAttachment(attachment.id, attachment.fileName).catch((err) => toast.error(err.message))}>Download</Button>]}>{attachment.fileName} ({Math.ceil(attachment.fileSize / 1024)} KB)</List.Item>} />}
           </Card>
@@ -416,6 +474,32 @@ export function ConversationDetailPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="Share a location"
+        open={locationModalOpen}
+        onCancel={() => setLocationModalOpen(false)}
+        onOk={handleSendLocation}
+        confirmLoading={sendingLocation}
+        okText="Send location"
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="Only works inside the 24-hour reply window"
+          description="The customer will get a map pin they can open in WhatsApp."
+        />
+        <Button icon={<EnvironmentOutlined />} onClick={useDeviceLocation} loading={locatingDevice} style={{ marginBottom: 16 }}>
+          Use my current location
+        </Button>
+        <Space orientation="vertical" style={{ width: '100%' }}>
+          <Input placeholder="Latitude (e.g. -1.286389)" value={locationForm.latitude} onChange={(e) => setLocationForm({ ...locationForm, latitude: e.target.value })} />
+          <Input placeholder="Longitude (e.g. 36.817223)" value={locationForm.longitude} onChange={(e) => setLocationForm({ ...locationForm, longitude: e.target.value })} />
+          <Input placeholder="Place name (optional)" value={locationForm.name} onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })} />
+          <Input placeholder="Address (optional)" value={locationForm.address} onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })} />
+        </Space>
+      </Modal>
 
       <Modal
         title="Send a message template"

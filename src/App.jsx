@@ -19,6 +19,8 @@ import { AdminOrganizationSettingsPage } from './pages/AdminOrganizationSettings
 import { DepartmentsPage } from './pages/DepartmentsPage';
 import { TeamsPage } from './pages/TeamsPage';
 import { TagsPage } from './pages/TagsPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
+import { BulkSendPage } from './pages/BulkSendPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MetaCallbackPage } from './pages/MetaCallbackPage';
@@ -125,6 +127,8 @@ function App() {
         <Route path="/team/departments" element={<RequireOrganizationAdmin isAuthenticated={isAuthenticated}><DepartmentsPage /></RequireOrganizationAdmin>} />
         <Route path="/team/teams" element={<RequireOrganizationAdmin isAuthenticated={isAuthenticated}><TeamsPage /></RequireOrganizationAdmin>} />
         <Route path="/tags" element={<RequireAuth isAuthenticated={isAuthenticated}><TagsPage /></RequireAuth>} />
+        <Route path="/analytics" element={<RequireAuth isAuthenticated={isAuthenticated}><AnalyticsPage /></RequireAuth>} />
+        <Route path="/bulk-send" element={<RequireAuth isAuthenticated={isAuthenticated}><BulkSendPage /></RequireAuth>} />
         <Route path="/meta-callback" element={<MetaCallbackPage />} />
         <Route
           path="/notifications"

@@ -1,5 +1,7 @@
 import { Layout as AntLayout, Menu, Badge, Button, Typography, Tooltip, Tag } from 'antd';
 import {
+  BarChartOutlined,
+  SendOutlined,
   DashboardOutlined,
   MessageOutlined,
   TeamOutlined,
@@ -46,6 +48,7 @@ const NAV_ITEMS = [
   { type: 'group', label: 'Support', children: [
     { key: '/conversations', icon: <MessageOutlined />, label: 'Conversations' },
     { key: '/customers', icon: <TeamOutlined />, label: 'Customers' },
+    { key: '/bulk-send', icon: <SendOutlined />, label: 'Bulk send' },
     { key: '/tags', icon: <TagsOutlined />, label: 'Tags' }
   ] },
   { type: 'group', label: 'Team', adminOnly: true, children: [
@@ -54,6 +57,7 @@ const NAV_ITEMS = [
     { key: '/team/teams', icon: <UsergroupAddOutlined />, label: 'Teams' }
   ] },
   { type: 'group', label: 'Workspace', children: [
+    { key: '/analytics', icon: <BarChartOutlined />, label: 'Analytics' },
     { key: '/notifications', icon: <BellOutlined />, label: 'Notifications' },
     { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
     { key: '/audit-log', icon: <FileTextOutlined />, label: 'Audit log', adminOnly: true }
@@ -75,6 +79,8 @@ const PAGE_TITLES = [
   { prefix: '/conversations', title: 'Conversations' },
   { prefix: '/customers', title: 'Customers' },
   { prefix: '/tags', title: 'Tags' },
+  { prefix: '/analytics', title: 'Analytics' },
+  { prefix: '/bulk-send', title: 'Bulk send' },
   { prefix: '/team/users', title: 'Users' },
   { prefix: '/team/departments', title: 'Departments' },
   { prefix: '/team/teams', title: 'Teams' },

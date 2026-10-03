@@ -541,3 +541,23 @@ export async function downloadAttachment(id, fileName) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+export async function sendLocationMessage({ conversationId, latitude, longitude, name = null, address = null }) {
+  return request('/messages/location', {
+    method: 'POST',
+    auth: true,
+    body: { conversationId, latitude, longitude, name, address }
+  });
+}
+
+export async function getMessagingAnalytics(days = 30) {
+  return request(`/analytics/summary?days=${days}`, { auth: true });
+}
+
+export async function sendBulkTemplate({ templateId, recipients }) {
+  return request('/messages/bulk-template', {
+    method: 'POST',
+    auth: true,
+    body: { templateId, recipients }
+  });
+}
